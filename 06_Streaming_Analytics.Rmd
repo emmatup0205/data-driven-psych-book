@@ -1,0 +1,162 @@
+# Streaming Analytics - Understanding Platform Popularity Across Age Groups
+
+## Chapter Introduction
+
+This assignment investigates the relationship between **age groups** and **streaming platform preferences**. Using survey data from multiple age categories (18-25, 26-40, 41+), we aim to understand how streaming service choices vary across demographics.
+
+This analysis demonstrates:
+
+1. Data cleaning and preparation in R.
+2. Visualization of proportions and counts using ggplot2.
+3. Contingency table analysis and Chi-Square Test of Independence.
+4. Contribution analysis and effect size interpretation using Cramer's V.
+
+The results help identify demographic trends in platform usage, which can guide marketing and content strategies for streaming services.
+
+```{r streaming-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Install packages
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(ggthemes)
+library(pheatmap)
+library(rstatix)
+library(vcd)
+
+# Set working directory to the folder containing your file
+setwd("~/Downloads/Streaming Services and Age Assignment")
+
+# Load dataset
+streaming <- read_excel("Streaming Services and Age.xlsx")
+
+# Ensure categorical formatting
+streaming <- streaming %>%
+  mutate(AgeCat = factor(AgeCat,
+                         levels = c("18–25", "26–40", "41+")),
+         Platform = factor(Platform,
+                           levels = c("Netflix", "Hulu", "Disney+", "Amazon", "Other")))
+```
+
+```{r streaming-load-data}
+# Adjust path if necessary
+path <- '/mnt/data/Streaming Services and Age.xlsx'
+
+# Read first sheet
+raw <- read_excel("Streaming Services and Age.xlsx", sheet = 1)
+
+# Quick look
+glimpse(raw)
+
+# Clean column names and coerce to factors
+df <- raw %>%
+  clean_names() %>%
+  rename(age = contains('age'), platform = contains('platform')) %>%
+  mutate(
+    age = factor(age, levels = c('18-25', '26-40', '41+')), 
+    platform = factor(platform, levels = c('Netflix','Hulu','Disney+','Amazon','Other'))
+  )
+
+# Totals per variable
+age_counts <- df %>% count(age)
+platform_counts <- df %>% count(platform)
+
+age_counts
+platform_counts
+
+# Contingency table
+ct <- table(df$age, df$platform)
+ct
+```
+
+```{r stacked-bar, fig.width=8, fig.height=5, fig.cap="Stacked bar chart showing the proportion of streaming platform preferences within each age group. Highlights which platforms dominate among younger, middle, and older adults."}
+# Stacked bar: proportions within each age group
+prop_df <- as.data.frame(prop.table(ct, margin = 1))
+colnames(prop_df) <- c('age','platform','proportion')
+
+ggplot(prop_df, aes(x = age, y = proportion, fill = platform)) +
+  geom_col(position = 'fill') +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = 'Platform Preference (Proportion) by Age Group',
+       x = 'Age Group', y = 'Percent within Age Group', fill = 'Platform') +
+  theme_solarized()
+```
+
+```{r clustered-bar, fig.width=8, fig.height=5, fig.cap="Clustered bar chart showing counts of respondents in each group who selected each streaming platform. Provides raw frequency context for platform popularity."}
+# Clustered bar: counts side-by-side
+count_df <- as.data.frame(ct)
+colnames(count_df) <- c('age','platform','count')
+
+ggplot(count_df, aes(x =platform, y = count, fill = age)) +
+  geom_col(position = position_dodge()) +
+  labs(title = 'Counts of Platform Preference by Age Group',
+       x = 'Platform', y = 'Count', fill = 'Age Group') +
+  theme_fivethirtyeight()
+```
+
+# Descriptive Statistics Interpretation
+The dataset included frequency counts for each streaming platform preference across three age groups. Overall, Netflix was the most commonly selected platform, followed by Hulu and Amazon. However, the distribution of preferences differed across age groups. The **18-25** group showed the highest overall usage of Netflix, while the **41+** group showed a higher proportion choosing Amazon. This suggests that streaming platform popularity varies across age demographics before conducting any statistical tests.
+
+```{r chisq}
+chisq_res <- chisq.test(ct)
+chisq_res
+
+chi_sq_stat <- unname(chisq_res$statistic)
+df_chi <- chisq_res$parameter
+p_val <- chisq_res$p.value
+
+chi_sq_stat; df_chi; p_val
+```
+
+# Chi-Square Test Interpretation
+A Chi-Square Test of Independence was conducted to examine the association between **age group** and **streaming platform preference**. The results indicated that the relationship between the two variables was **statistically significant**, meaning that streaming platform choice is **not evenly distributed across age groups**. This allows us to conclude that age and streaming preference are **associated** rather than independent.
+
+```{r obs_exp_res}
+observed <- chisq_res$observed
+expected <- chisq_res$expected
+residuals <- chisq_res$residuals
+
+observed
+expected
+round(residuals, 3)
+```
+
+```{r contributions, fig.cap="Heatmap showing the percent contribution of each cell in contingency table to the overall Chi-Square statistic. Highlights which age-platform combinations drive the association."}
+library(pheatmap)
+
+# Step 3 Chi-square (re-run if needed)
+chisq_res <- chisq.test(table(streaming$AgeCat, streaming$Platform))
+
+# Step 4: Extract observed, expected, and residuals
+obs <- chisq_res$observed
+exp <- chisq_res$expected
+res <- chisq_res$residuals
+
+# Step 5: Cell contributions
+contrib <- (obs - exp)^2 / exp
+
+# Convert to percent contribution
+contrib_percent <- (contrib / sum(contrib)) * 100
+
+# Heatmap of percent contributions
+pheatmap(contrib_percent,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         display_numbers = TRUE,
+         number_format = "%.1f",
+         main = "Percent Contribution to Chi-Square Statistic")
+```
+
+```{r effect-size}
+library(rcompanion)
+
+cramers_v <- cramerV(table(streaming$AgeCat, streaming$Platform))
+cramers_v
+```
+
+# Effect Size Interpretation
+Effect size was measured using Cramer's V=0.337, which indicates a **moderate association** between age group and streaming platform preference. This means that while the relationship is not extremely strong, it is meaningful and practically interpretable.
+
+# Final Interpretation
+The Chi-Square test indicated a statistically significant relationship between age group and streaming platform preference. The contribution analysis showed that the largest contributers of this association were the **18-25 age group preferring Netflix more than expected** (~16% contribution) and the **41+ age group preferring Amazon more than expected** (~36% contribution). These patterns suggest that younger adults disproportionately favor Netflix, while older adults show a stronger preference for Amazon. The effect size, **Cramer's V=0.337**, indicated a **moderate association** between age group and streaming platform choice. Overall, these results suggest that platform popularity varies meaningfully by age demographic, which may inform targeted marketing and content strategy decisions across streaming services. 

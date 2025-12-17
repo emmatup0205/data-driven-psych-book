@@ -1,0 +1,264 @@
+# Wage Analytics - Predicting High vs. Low Earners Using Logistic Regression
+
+## Chapter Introduction
+
+This assignment investigates wage outcomes using the **Wage dataset** from the ISLR package. We categorize wages into **High** and **Low** groups based on the median and aim to identify factors associated with higher earnings.
+
+The analysis demonstrates:
+
+1. Descriptive comparisons of wage groups by **age** and **education**.
+2. Group differences using **t-tests** and **ANOVA**.
+3. Association tests using **Chi-Square** and effect size (Cramer's V).
+4. Predictive modeling using **logistic regression**, including evaluation with **confusion matrices** and **ROC/AUC**.
+
+This chapter illustrates how demographic, job-related, and health variables contribute to wage outcomes and demonstrates predictive modeling for classification.
+
+```{r wage-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+set.seed(12345)
+
+
+library(ISLR)
+library(dplyr)
+library(janitor)
+library(caTools)
+library(caret)
+library(pROC)
+library(DescTools)
+library(broom)
+library(knitr)
+```
+
+```{r load-wage}
+library(ISLR)
+data(Wage)
+wage <- Wage
+```
+
+```{r wage-load-data}
+data("Wage", package = "ISLR")
+w <- Wage
+
+
+# Create wage category based on the median
+med_wage <- median(w$wage, na.rm = TRUE)
+w <- w %>%
+dplyr::mutate(
+WageCategory = dplyr::case_when(
+wage > med_wage ~ "High",
+wage < med_wage ~ "Low",
+TRUE ~ NA_character_
+),
+WageCategory = factor(WageCategory, levels = c("Low", "High"))
+)
+
+
+table(w$WageCategory, useNA = "ifany")
+```
+
+```{r wage-clean-factors}
+fix_factor_prefix <- function(f) {
+lv <- levels(f)
+lv <- gsub("^[0-9]+-", "", lv)
+levels(f) <- lv
+f
+}
+
+
+factor_vars <- names(w)[sapply(w, is.factor)]
+
+
+for (v in factor_vars) {
+w[[v]] <- fix_factor_prefix(w[[v]])
+}
+```
+
+```{r t-test-age, fig.cap="Comparison of mean age between Low and High wage earners. High earners are on average older than Low earners, indicating age is associated with wage."}
+age_by_wage <- w %>%
+  dplyr::filter(!is.na(WageCategory)) %>%
+  dplyr::select(age, WageCategory)
+
+
+age_summary <- age_by_wage %>%
+  dplyr::group_by(WageCategory) %>%
+  dplyr::summarise(
+    mean_age = mean(age, na.rm = TRUE),
+    n = dplyr::n()
+  )
+
+
+age_summary
+
+
+t_res <- t.test(age ~ WageCategory, data = age_by_wage)
+broom::tidy(t_res)
+```
+
+# Mean ages
+- Low wage earners: 40.01 years
+- High wage earners: 44.69 years
+
+# Test statistics
+- t = -11.14
+- df = 2724.7
+- p < 2.2 x 10^-16
+
+# Interpretation
+There is a statistically significant age difference between High and Low wage earners. On average, High earners are about *4.7 years older* than Low earners. Because the p-value is extremely small, we conclude that age is meaningfully associated with earning a high wage in this dataset.
+
+```{r anova-education, fig.cap="Boxplot showing wage differences across education levels. Wages increase consistently with higher education, with all pairwise comparisons significant."}
+aov_mod <- aov(wage ~ education, data = w)
+summary(aov_mod)
+
+
+TukeyHSD(aov_mod)
+```
+
+# From the ANOVA table
+- F(4, 2995) = 229.8
+- p < 2 x 10^-16
+
+# Interpretation
+There is a significant effect of education level on wage. Individuals with higher levels of education earn significantly higher wages on average. Tukey post-hoc comparisons show that *every education level differs significantly from the one below it*, with wages increasing steadiy from "<HS Grad" up to "Advanced Degree." Education appears to be one of the strongest predictors of wage in the dataset.
+
+```{r chisq-jobclass, fig.cap="Contingency table of Wage Category by Job Class. High earners are more common in Information jobs, while Low earners are more common in Industrial jobs."}
+ct <- table(w$WageCategory, w$jobclass)
+ct
+
+
+chisq_res <- chisq.test(ct)
+chisq_res
+
+
+CramerV(ct)
+```
+
+# Test statistics
+- X^2 = 97.07
+- df = 1
+- p < 2.2 x 10^-16
+- Cramer's V = 0.183 (small-medium association)
+
+# Interpreation
+Wage catergor is significantly associated with type of job class.
+- Low earners are more common in *Industrial* jobs.
+- High earners are more common in *Information* jobs. Although the association is not extremely strong (V≈0.18), it is meaningful and indicates job class plays a role in wage outcomes.
+
+```{r split}
+set.seed(2025)
+split <- caTools::sample.split(w$WageCategory, SplitRatio = 0.70)
+train_data <- w[split, ]
+test_data <- w[!split, ]
+
+
+prop.table(table(train_data$WageCategory))
+prop.table(table(test_data$WageCategory))
+```
+
+```{r model-fit, fig.cap="Odds ratios from the logistic regresion model predicticing High wage category. Education, age, marital status, health, and year are significant predictors."}
+train_data <- train_data %>%
+dplyr::mutate(
+education = droplevels(education),
+jobclass = droplevels(jobclass),
+maritl = droplevels(maritl),
+race = droplevels(race),
+health = droplevels(health),
+health_ins = droplevels(health_ins)
+)
+
+
+logit_mod <- glm(
+WageCategory ~ age + education + jobclass + maritl + race + health + health_ins + year,
+data = train_data,
+family = binomial
+)
+
+
+summary(logit_mod)
+
+
+odds_table <- broom::tidy(logit_mod, exponentiate = TRUE, conf.int = TRUE)
+knitr::kable(odds_table, digits = 3)
+```
+
+# Significant predictors (P<.05)
+- Age
+- Education: all levels 2-5
+- Married, divorced
+- Race: Black
+- Health: ≥Very Good
+- Health insurance: No
+- Year
+
+# Non-significant predictors
+- Job class
+- Widowed, separated
+- Race: Asian, Other
+
+# Direction and size (using Odds Ratios)
+- *Education is the strongest predictor*. For example:
+  - Advanced Degree OR = 17.06
+  -College Grade OR = 9.77
+- Age: OR = 1.023 -> each additional year increases odds of High wage by ~2.3%.
+- Married: OR = 3.47 -> much higher offs of being a High earner.
+- Race (Black): OR = 0.56 -> lower odds of hgih wage compared to White.
+- No health insurance: OR = 0.29 -> surprisingly strong _decrease_ in odds.
+- Year: OR = 1.095 -> later survey years have higher odds of high wages.
+
+# Findings
+Job class was *not significant*, even though the Chi-square test showed an association. This often happens when other stronger variables absorb the predictive power. Also, individuals without health insurance had *much lower* odds of high wage, which may reflect socioeconomic or employer-benefit differences.
+
+```{r predict-test, fig.cap="Confusion matrix showing logistic regression performance on test data. Displays accuracy, sensitivity, and specificity for predicting High vs. Low wage earners."}
+test_data$pred_prob <- predict(logit_mod, newdata = test_data, type = "response")
+
+
+test_data$pred_class <- factor(
+ifelse(test_data$pred_prob >= 0.5, "High", "Low"),
+levels = c("Low", "High")
+)
+
+
+confusionMatrix(test_data$pred_class, test_data$WageCategory, positive = "High")
+```
+
+# Confusion matrix results
+- Accuracy: 0.733
+- Sensitivity (High earners detected): 0.717
+- Specificity (Low earners detected): 0.749
+- Balanced Accuracy: 0.733
+- No Information Rate (NIR): 0.506
+- Accuracy is _much higher_ than the NIR, and p<2e-16 confirms the model significantly beats chance.
+
+# Interpretation
+The model performs well on unseen data. It predicts both wage categories reasonably well, with slightly stronger performance for Low earners (higher specificity). Overall accuracy is strong relative to the baseline.
+
+```{r roc-auc, fig.cap="ROC curve for logistic regression model predicting High wage earners. AUC = 0.82 indicates excellent discrimination between High and Low earners."}
+roc_obj <- roc(
+response = test_data$WageCategory,
+predictor = test_data$pred_prob,
+levels = c("Low", "High"),
+direction = "<"
+)
+
+
+auc_val <- auc(roc_obj)
+auc_val
+
+
+plot(roc_obj, main = paste0("ROC Curve (AUC = ", round(auc_val, 3), ")"))
+```
+
+- AUC = 0.820
+- An AUC aboce 0.80 indicates *excellent classification performance*.
+
+# Interpreation
+The ROC curve shows the model is effective at distinguishing High vs. Low earners. Sensitivity (correctly identifying High earners) is strong, and specificity is also good. The AUC well exceeds the chance level of 0.50, and accuracy is far above the NIR, confirming that the model performs reliably better than random guessing.
+
+# Final Interpretation 
+The results across descriptive statistics, group comparisons, and predictive modeling all suggest that wage outcomes are systematically related to age, education, marital status, and job-related characteristics. Age shows a notable difference between wage groups, with High earners being significantly older on average. Education emerges as one of the most significant correlates of wage, confirmed by both ANOVA and logistic regression. Wages consistently increase as educational attainment rises, and each step up from "<HS" to "Advanced Degree" adds a considerable wage increase.
+
+Job class also demonstrates an association with wage category in the Chi-square analysis, with Information jobs containing a higher proportion of High earners. However, when included alongside other predictors in the logistic regression, job class is no longer a significant predictor. This suggests that job class and wage category are linked, but much of the predictive value is explained by other variables, such as education. Marital status also plays a notable role; married individuals have substantially higher odds of being High earners, while divorce offers a smaller and significant increase.
+
+The logistic regression model provided strong predictive performance. Accuracy on the test set (73.3%) was well above the No Information Rate (50.6%), and the AUC of 0.82 shows excellent ability to discriminate between High and Low earners. The model predicted Low earners slightly more accurately, but performance was balanced overall. These results indicate that the model generalizes well to unseen data and captures meaningful patterns in the wage structure.
+
+If this analysis were repeated, it might be valuable to add variables related to type of industry, years of experience, workload, or employer characteristics, which might further clarify wage drivers. Removing non-significant predictors like job class or some of the race categories might slightly simplify the model without harming predictive power. Overall, the results emphasize the strong importance of education, marital status, age, and health insurance status in predicting wage category within the Wage dataset.

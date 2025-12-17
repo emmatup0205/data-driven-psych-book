@@ -1,0 +1,46 @@
+# Final Reflection
+
+This Semester has been an incredible journey in psychological research and data analysis. Working through multiple assignments and projects in R, including data cleaning, visualization, and statistical modeling, has not only deepended my understanding of analytical techniques but also strengthened my confidence as a researcher.
+
+## What I Learned
+
+Over the course of the semester, I gained a lot of knowledge and practical experience. I became proficient at:
+
+1. **Data manipulation and cleaning**, including handling missing data, converting variables, and organzing datasets for analysis.
+2. **Data visualization**, using ggplot2 to create clear, informative figures that highlight patterns and trends.
+3. **Statistical analysis**, including t-tests, ANOVAs, Chi-Square tests, and logistic regression, along with effect size interpretation and post-hoc analyses.
+4. **Interactive reporting**, using R Markdown and Shiny to communicate results dynamically.
+
+Beyond technical skills, I also improved in **scientific reasoning**, learning to interpret results carefully and to relate statistical findings to real-world implications.
+
+## Challenges
+
+There were definitely some challenges that were face, but overcome. Some of the biggest challenges included:
+
+1. **Debugging complex R code**, especially when working with large datasets or integrating Shiny applications.
+2. **Statistical interpretation**, particularly understanding nuanced outputs like residuals, effect sizes, and model diagnostics.
+3. **Synthesizing information** across multiple datasets and assignments inot coherent conclusions that explain what is happening.
+
+These challenges often required persistence, iterative testing, and careful review of both statistical concepts and coding syntax.
+
+## Achievements and Pride
+
+I am most proud of completing the **Bookdown project**, which integrated multiple homework assignments into a cohesive, polished report. Seeing each chapter come together with reproducible code, interactive visualizations, and clear interpretations was incredibly rewarding. I am particularly proud of:
+
+1. Successfully implementing **interactive Shiny plots** that allow dynamic exploration of datasets.
+2. Conducting **complex analyses**, such as logistic regression and Chi-Square contribution analysis, and explaining them clearly in text and figures.
+3. Maintaining **consistency and clarity** throughout all chapters, ensuring that every plot, table, and caption communicates its intended meaning.
+
+## Growth in Skills and Confidence
+
+Throughout the semester, my skills and confidence have grown tremendously. I now feel more capable of:
+
+1. Independently exploring and analyzing datasets.
+2. Choosing appropriate statistical tests for different research questions.
+3. Communicating results in a clear, professional, and reproducible way.
+
+Moreover, completing these projects has boosted my confidence in **problem-solving** within R and in tackling unfamiliar datasets. I feel prepared to apply these skills in future coursework, research, or professional settings.
+
+## Closing Thoughts
+
+Overall, this semester reinforced the value of persistence, curiosity, and attention to detail in research. From data wrangling to modeling to interactive reporting, I've developed a toolkit that I can carry forward into future studies. I am excited to continue building on these skills and confident that I can approach new challenges in data analysis with bot rigor and creativity.

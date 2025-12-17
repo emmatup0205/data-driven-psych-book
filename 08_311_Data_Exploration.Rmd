@@ -1,0 +1,83 @@
+# RMarkdown, Shiny, and NYC 311 Data
+
+## Chapter Introduction
+
+In this assignment, we explore New York City's **311 service request data** to better understand patterns in complaints across boroughs. The goal is to identify which boroughs generate the most complaints and to examine the most common complaint types within each borough.
+
+This chapter demonstrates skills in:
+
+1. Accessing and retrieving public data using the nycOpenData package.
+2. Data manipulation and summarization with tidyverse.
+3. Interactive data visualization using Shiny inputs and reactive outputs.
+
+By combining descriptive statistics with interactive plots, readers can dynamically explore patterns in complaints across the city.
+
+```{r 311-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 311 Data Exploration
+
+## Introduction
+Today, we are going to be exploring the amazing 311 dataset as part of the `nycOpenData` package, specifically the `nyc_311` function from that package.
+
+We will be looking at the **311** dataset, specifically which boroughs have the most complaints and what the top complaints in *each* borough is.
+
+## Loading our libraries
+Here we are going to make sure that all of our libraries are loaded.
+```{r libraries, message=FALSE, warning=FALSE}
+library(shiny)
+library(tidyverse)
+library(nycOpenData)
+library(DT)
+```
+
+## Calling our data
+Now that we have loaded our libraries, lets get our data
+
+```{r call-311}
+data_311<- nyc_311(limit = 10000)
+```
+
+## Inputs and Outputs
+
+You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change.  This demonstrates how a standard R plot can be made interactive by wrapping it in the Shiny `renderPlot` function. The `selectInput` and `sliderInput` functions create the input widgets used to drive the plot.
+
+```{r NYC_311_off_fly, echo=FALSE, fig.cap="Interactive bar chart showing the top N complaint types for a selected borough. The dropdown menu allows users to choose a borough, and the slider controls how many of the most frequent complaint types are displayed. This visualization highlights patterns in service requests across NYC boroughs and allows comparison of complaint prevelance within each borough."}
+inputPanel(
+      selectInput("boro","Choose a Borough:", # creates the selection part
+                  choices = c("BRONX","BROOKLYN","MANHATTAN","QUEENS","STATEN ISLAND","Unspecified")),
+      sliderInput("top_n","Number of Top Complaint Types:",5,20,10) # creates the slider part
+    )
+
+renderPlot({
+   data_311 %>% 
+      filter(borough == input$boro) %>%
+      count(complaint_type, sort = T) %>%
+      slice_head(n=input$top_n) %>%
+      ggplot(aes(n,fct_reorder(complaint_type,n))) +
+      geom_col(fill= "steelblue")
+  })
+```
+
+## Embedded Application
+
+It's also possible to embed an entire Shiny application within an R Markdown document using the `shinyAppDir` function. This example embeds a Shiny application located in another directory:
+
+```{r tabsets, echo=FALSE}
+shinyAppDir(
+  "/Users/emmatupone/Assignment 1/RMarkdown & Shiny Assignment/NYC_311_Borough_Data",
+  options = list(
+    width = "100%", height = 550
+  )
+)
+```
+
+Note the use of the `height` parameter to determine how much vertical space the embedded application should occupy.
+
+You can also use the `shinyApp` function to define an application inline rather then in an external directory.
+
+In all of R code chunks above the `echo = FALSE` attribute is used. This is to prevent the R code within the chunk from rendering in the document alongside the Shiny components.
+
+
+

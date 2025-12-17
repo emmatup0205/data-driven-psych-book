@@ -1,0 +1,141 @@
+# NBA Analytics - Exploring Team Performance Through Reproducible Analysis
+
+## Chapter Introduction
+
+This chapter analyzes NBA team performance during the 2024-2025 season using reproducible data analysis techniques in R. The goal of the assignment is to explore relationships between offensive production, defensive activity, player age, and conference affiliation. Skills demonstrated include data wrangling across multiple Excel sheets, visualization with ggplot2, correlation analysis, and statistical interpretation. All analyses are conducted at the **team level**, which is important to consider when interpreting results.
+
+## Setup 
+
+```{r nba-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(readxl)
+library(ggcorrplot)
+library(psych)
+library(ppcor)
+
+
+list.files()
+```
+
+## Data Import and Cleaning
+
+```{r nba-load-data}
+# File names
+team_xlsx <- "NBA Team Total Data 2024-2025.xlsx"
+conf_xlsx <- "Team Conferences.xlsx"
+
+# Check all sheet names in the team data workbook
+excel_sheets(team_xlsx)
+```
+
+```{r nba-check-columns}
+library(readxl)
+
+# Look at the first team sheet to check the column names
+test_sheet <- read_excel(team_xlsx, sheet = 1)
+names(test_sheet)
+```
+
+```{r nba-combine-data}
+# Function to load each team’s data
+load_team_data <- function(sheet_name) {
+  df <- read_excel(team_xlsx, sheet = sheet_name)
+  
+  df <- df %>%
+    mutate(
+      Team = sheet_name,
+      Won_award = ifelse(Awards > 0, 1, 0),
+      PRA = PTS + TRB + AST,
+      STOCKS = STL + BLK
+    )
+  
+  return(df)
+}
+
+# Apply the function to all sheets and combine
+all_teams <- lapply(excel_sheets(team_xlsx), load_team_data) %>%
+  bind_rows()
+
+# Preview combined dataset
+head(all_teams)
+```
+
+```{r nba-add-conference}
+# Load the conference lookup data
+conference_lookup <- read_excel(conf_xlsx)
+
+# Merge with main dataset and create binary variable
+all_teams <- all_teams %>%
+  left_join(conference_lookup, by = "Team") %>%
+  mutate(Conference_binary = ifelse(Conference == "East", 1, 0))
+
+# Preview to confirm
+head(all_teams)
+```
+
+## Visualizations
+
+```{r nba-scatter-box, fig.height=5, fig.width=7}
+
+fig.cap="Scatterplot showing the relationship between offensive performance (PRA) and defensive activity (STOCKS), colored by conference. Each point represents a team, allowing comparison of overall team balance across conferences. The boxplot below displays the distribution of PRA values within each conference, highlighting variability and central tendencies in offensive production."
+# Scatterplot: PRA vs STOCKS by Conference
+ggplot(all_teams, aes(x = PRA, y = STOCKS, color = Conference)) +
+  geom_point(size = 3) +
+  labs(
+    title = "Offensive vs. Defensive Performance by Conference",
+    x = "Points + Rebounds + Assists (PRA)",
+    y = "Steals + Blocks (STOCKS)",
+    color = "Conference"
+  ) +
+  theme_minimal()
+
+# Second visualization: average PRA by Conference
+ggplot(all_teams, aes(x = Conference, y = PRA, fill = Conference)) +
+  geom_boxplot() +
+  labs(
+    title = "Distribution of PRA by Conference",
+    x = "Conference",
+    y = "PRA (Offensive Metric)"
+  ) +
+  theme_minimal()
+```
+These figures visualize how teams balance offensive and defensive output and whether conference affiliation appears related to overall performance patterns.
+
+## Correlation Analysis
+```{r nba-correlations, fig.cap="Correlation matrix illustrating the relationships among Age, PRA, and STOCKS"}
+# Point-biserial correlations (Conference vs PRA and STOCKS)
+cor.test(all_teams$Conference_binary, all_teams$PRA)
+cor.test(all_teams$Conference_binary, all_teams$STOCKS)
+
+# Create correlation matrix for Age, PRA, and STOCKS
+corr_data <- all_teams %>%
+  dplyr::select(Age, PRA, STOCKS) %>%
+  na.omit()
+
+# Compute and visualize correlation matrix
+corr_matrix <- cor(corr_data)
+ggcorrplot(corr_matrix, lab = TRUE, title = "Correlation Matrix: Age, PRA, and STOCKS")
+```
+This analysis examiness whether team age profiles are associated with offensive and defensive performance metrics.
+
+## Executive Memo
+```{r nba-memo, echo=FALSE}
+cat("
+**To:** NBA Commissioner Adam Silver
+**From:** Emma Valentina Tupone
+**Subject:** Summary of 2024-2025 Team Performance Analysis
+
+Our analysis of team performance metrics shows a moderate positive relationship between offensive output (Points + Rebounds + Assists, PRA) and defensive activity (Steals + Blocks, STOCKS).
+Teams that performed well offensively tended to also perform well defensively.
+
+Overall, differences between Eastern and Western Conference teams were minor. There was also no strong evidence that one conference consistently outperformed the other across these measures.
+
+When focusing on player Age, the relationship between PRA and STOCKS remained positive. This suggests that team performance links are not primarily driven by player experience.
+
+**Limitation:** The data represents team-level totals rather than individual player-level performance, limiting insight into specific player contributions.
+**Next Step:** Future analyses could include player efficiency ratings or advanced metrics such as plus-minus to better understand what drives elite performances across teams.
+")
+```
+

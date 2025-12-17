@@ -1,0 +1,93 @@
+# R Script to R Markdown Report 
+
+## Introduction
+
+This report explores the [NYPD Shooting Incidents Data](https://data.cityofnewyork.us/resource/833y-fsy8.json) using R.
+The workflow demonstrates how to acquire, clean, and visualize open-source data in a reproducible way.
+
+## Setup
+
+```{r script-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(knitr)
+library(jsonlite)
+```
+
+## Loading the Data
+
+```{r script-load-data}
+# API call to NYC Open Data
+url <- "https://data.cityofnewyork.us/resource/833y-fsy8.json"
+shooting_data <- jsonlite::fromJSON(url)
+
+# Peek at data
+head(shooting_data)
+```
+The dataset currently contains **`r nrow(shooting_data)`** rows of shooting incident records.
+
+## Data Cleaning
+
+```{r script-cleaning}
+shooting_clean <- shooting_data %>%
+  # Step 1: Remove rows missing occur_date
+  filter(!is.na(occur_date)) %>%
+  # Step 2: Create time_of_day variable
+  mutate(
+    occur_date = ymd(occur_date),
+    occur_time = hm(occur_time),
+    hour = hour(occur_time),
+    time_of_day = case_when(
+      hour >= 5 & hour < 12 ~ "Morning",
+      hour >= 12 & hour < 17 ~ "Afternoon",
+      hour >= 17 & hour < 21 ~ "Evening",
+      TRUE ~ "Night"
+    ),
+    borough = str_to_title(boro)
+  )
+```
+I cleaned the dataset by dropping rows with missing dates, creating a `time_of_day` variable based on the hour of the incident, and standardizing borough names.
+
+## Insights
+
+```{r script-insights}
+# Distribution of incidents by borough
+borough_counts <- shooting_clean %>%
+  count(borough, sort = TRUE)
+
+borough_counts
+```
+The table above shows the distribution of incidents across boroughs. The borough with the most shootings is **`r borough_counts$borough[1]`**.
+
+```{r script-table}
+# Create a clean table with kable
+kable(borough_counts, caption = "Distribution of Shooting Incidents by Borough")
+```
+
+## Visualizations
+
+```{r script-plot-timeofday}
+ggplot(shooting_clean, aes(x = time_of_day)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Shooting Incidents by Time of Day",
+       x = "Time of Day",
+       y = "Count of Incidents") +
+  theme_minimal()
+```
+The bar plot above shows how shootings are distributed across different times of the day.
+
+```{r script-plot-borough}
+ggplot(shooting_clean, aes(x = borough)) +
+  geom_bar(fill = "darkred") +
+  labs(title = "Shooting Incidents by Borough",
+       x = "Borough",
+       y = "Count of Incidents") +
+  theme_minimal()
+```
+The second plot shows which boroughs experience the highest number of incidents.
+
+## Reflection
+
+Learning R Markdown this week has shown me how to keep my code and explanations together in one place, which helps make my work easier to follow. I can see how this would help me with my thesis on climate change and peer anxiety/influence because I'll be able to keep track of my analysis steps and show exactly how I got my results. It also makes me think more carefully about how to explain what the numbers and graphs mean and not just how to calculate them. Using R Markdown has helped me also learn the best ways to share my results and findings with others.

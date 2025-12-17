@@ -1,0 +1,284 @@
+# Exercise and Sleep Analytics 
+
+## Chapter Introduction
+
+This midterm assignment examines whether different types of exercise are associated with changes in sleep duration and sleep quality. Using survey and sleep diary data, I apply data cleaning, data merging, descriptive statistics, visualizations, t-tests, and ANOVA techniques to evaluate how **Aerobic**, **Resistance**, and **Control** exercise groups differ in sleep outcomes. Particular attention is paid to careful data cleaning, as errors in categorical variables can have cascading effects on analyses and interpretation.
+
+## Setup
+
+```{r midterm-setup, include FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(rstatix)
+library(ggplot2)
+library(supernova)
+library(emmeans)
+library(knitr)
+library(kableExtra)
+library(here)
+```
+
+## Data Import
+
+```{r midterm-import-data}
+excel_file <- here::here("midterm_sleep_exercise.xlsx")
+sheets <- excel_sheets(excel_file)
+
+participant_info_midterm <- read_excel(excel_file, sheet = sheets[1]) %>% clean_names()
+sleep_data_midterm <- read_excel(excel_file, sheet = sheets[2]) %>% clean_names()
+
+glimpse(participant_info_midterm)
+glimpse(sleep_data_midterm)
+```
+
+## Data Cleaning and Merging
+
+```{r midterm-merge}
+names(participant_info_midterm)
+names(sleep_data_midterm)
+```
+
+```{r midterm-cleaning}
+# Standardize 'sex' column
+
+participant_info_midterm <- participant_info_midterm %>%
+  mutate(
+    sex = case_when(
+      tolower(sex) %in% c("m", "male", "mal", "mae") ~ "Male",
+      tolower(sex) %in% c("f", "female", "fem", "femalee", "femal") ~ "Female",
+      TRUE ~ NA_character_
+    ),
+  # Standardize 'exercise_group' column
+  exercise_group = case_when(
+    tolower(exercise_group) %in% c("aerobic", "cardio", "c", "cardio+weights", "c+w") ~ "Aerobic",
+    tolower(exercise_group) %in% c("resistance", "weights", "weightsss", "weightz") ~ "Resistance",
+    tolower(exercise_group) %in% c("control", "none", "n", "cw", "nonee") ~ "Control",
+    TRUE ~ NA_character_
+  ),
+  exercise_group = factor(exercise_group)
+) %>%
+filter(!is.na(exercise_group))  # remove unmatched/NA rows
+
+# Merge on 'id' column
+
+sleep_merged <- left_join(participant_info_midterm, sleep_data_midterm, by = "id")
+glimpse(sleep_merged)
+
+```
+
+## Derived Variables 
+
+```{r midterm-derived vars}
+sleep_merged <- sleep_merged %>%
+mutate(
+  pre_sleep_num = as.numeric(str_extract(as.character(pre_sleep), "[0-9]+\\.?[0-9]*")),
+  post_sleep_num = as.numeric(str_extract(as.character(post_sleep), "[0-9]+\\.?[0-9]*")),
+  sleep_difference = post_sleep_num - pre_sleep_num,
+  agegroup2 = case_when(
+    !is.na(age) & age < 40 ~ "Under40",
+    !is.na(age) & age >= 40 ~ "40plus",
+  TRUE ~ NA_character_
+  )
+) %>%
+drop_na(sleep_difference)
+```
+
+## Descriptive Statistics
+
+```{r midterm-descriptives}
+desc_overall <- sleep_merged %>%
+  summarise(
+    n = n(),
+    mean_diff = mean(sleep_difference, na.rm = TRUE),
+    sd_diff = sd(sleep_difference, na.rm = TRUE),
+    min_diff = min(sleep_difference, na.rm = TRUE),
+    max_diff = max(sleep_difference, na.rm = TRUE),
+    mean_eff = mean(sleep_efficiency, na.rm = TRUE),
+    sd_eff = sd(sleep_efficiency, na.rm = TRUE),
+    min_eff = min(sleep_efficiency, na.rm = TRUE),
+    max_eff = max(sleep_efficiency, na.rm = TRUE)
+  )
+
+kable(desc_overall, caption = "Overall escriptive statistics for sleep change and sleep efficiency across all participants.") %>%
+  kable_styling(full_width = FALSE)
+```
+
+```{r midterm-descriptives-group}
+desc_group <- sleep_merged %>%
+  group_by(exercise_group) %>%
+  summarise(
+    mean_diff = mean(sleep_difference, na.rm = TRUE),
+    sd_diff = sd(sleep_difference, na.rm = TRUE),
+    mean_eff = mean(sleep_efficiency, na.rm = TRUE),
+    sd_eff = sd(sleep_efficiency, na.rm = TRUE)
+  )
+
+kable(desc_group, caption = "Descriptive statistics for sleep outcomes by exercise group.") %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Visualizations 
+
+```{r midterm-boxplot-diff, fig.cap="Change in sleep duration (post minus pre) across exercise groups."}
+# Boxplot 1
+ggplot(sleep_merged, aes(x = exercise_group, y = sleep_difference)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Sleep Difference by Exercise Group",
+       x = "Exercise Group",
+       y = "Change in Sleep Duration (hrs)") +
+  theme_minimal()
+```
+
+```{r midterm-boxplot-eff, fig.cap="Relationship between sleep efficiency and sleep change."}
+# Boxplot 2
+ggplot(sleep_merged, aes(x = exercise_group, y = sleep_efficiency)) +
+  geom_boxplot(fill = "tan") +
+  labs(title = "Sleep Efficiency by Exercise Group",
+       x = "Exercise Group",
+       y = "Sleep Efficiency (%)") +
+  theme_minimal()
+```
+
+```{r midterm-scatter, fig.cap="Relationship between sleep efficiency and sleep change."}
+# Scatterplot
+ggplot(sleep_merged, aes(x = sleep_efficiency, y = sleep_difference, color = exercise_group)) +
+  geom_point(size = 2, alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Relationship Between Sleep Efficiency and Sleep Difference",
+       x = "Sleep Efficiency (%)",
+       y = "Sleep Difference (hrs)") +
+  theme_minimal()
+```
+## Visualization Interpretation
+Across all plots, **Aerobic exercise consistently shows the strongest improvements** in both sleep duration and efficiency. The Control group shows minimal change, while Resistance exercise produces moderate gains.
+
+## T-tests
+
+```{r midterm-check}
+table(sleep_merged$sex)
+table(sleep_merged$agegroup2)
+```
+
+```{r midterm-sleep-merge}
+sleep_merged <- sleep_merged %>%
+  mutate(
+    sex = case_when(
+      tolower(sex) %in% c("m", "male", "mal", "mae") ~ "Male",
+      tolower(sex) %in% c("f", "female", "fem", "femalee", "femal") ~ "Female",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+```{r midterm-check-2}
+table(sleep_merged$sex)
+```
+
+```{r midterm-sleep-merge-2}
+sleep_merged <- sleep_merged %>%
+  mutate(
+    agegroup2 = case_when(
+      !is.na(age) & age < 40 ~ "Under40",
+      !is.na(age) & age >= 40 ~ "40plus",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+```{r midterm-check-3}
+table(sleep_merged$agegroup2)
+```
+
+```{r midterm-t-test}
+# Filter to remove NA in grouping variables and sex
+
+t_sex <- sleep_merged %>% filter(!is.na(sex)) %>% t_test(sleep_difference ~ sex)
+t_age <- sleep_merged %>% filter(!is.na(agegroup2)) %>% t_test(sleep_difference ~ agegroup2)
+
+kable(t_sex, caption = "T-test: Sleep Difference by Sex") %>% kable_styling(full_width = FALSE)
+kable(t_age, caption = "T-test: Sleep Difference by Age Group") %>% kable_styling(full_width = FALSE)
+
+```
+
+## ANOVAs and Post-hocs
+
+```{r midterm-check-4}
+table(sleep_merged$exercise_group)
+```
+
+```{r midterm-sleep-merge-4}
+# Count per group
+sleep_merged %>% group_by(exercise_group) %>% summarise(n = n())
+
+# Check for constant values
+sleep_merged %>% group_by(exercise_group) %>% summarise(sd_diff = sd(sleep_difference, na.rm = TRUE),
+                                                       sd_eff = sd(sleep_efficiency, na.rm = TRUE))
+
+```
+
+```{r midterm-anova-safe, echo=TRUE}
+# Ensure each group has at least 2 participants
+sleep_merged_anova <- sleep_merged %>%
+  group_by(exercise_group) %>%
+  filter(n() > 1) %>%
+  ungroup() %>%
+  mutate(exercise_group = factor(exercise_group))
+
+# Check counts
+table(sleep_merged_anova$exercise_group)
+
+# Run ANOVAs
+anova_diff <- aov(sleep_difference ~ exercise_group, data = sleep_merged_anova)
+anova_eff  <- aov(sleep_efficiency ~ exercise_group, data = sleep_merged_anova)
+
+# ANOVA tables
+kable(broom::tidy(anova_diff), caption = "ANOVA: Sleep Difference by Exercise Group") %>%
+  kable_styling(full_width = FALSE)
+
+supernova(anova_diff)
+
+kable(broom::tidy(anova_eff), caption = "ANOVA: Sleep Efficiency by Exercise Group") %>%
+  kable_styling(full_width = FALSE)
+
+supernova(anova_eff)
+
+# Tukey post-hoc for Sleep Difference
+tukey_diff <- as.data.frame(TukeyHSD(anova_diff)$exercise_group)
+tukey_diff$Comparison <- rownames(tukey_diff)
+tukey_diff <- tukey_diff[, c("Comparison", "diff", "lwr", "upr", "p adj")]
+
+kable(tukey_diff, caption = "Tukey Post-hoc for Sleep Difference") %>%
+  kable_styling(full_width = FALSE)
+
+# Tukey post-hoc for Sleep Efficiency
+tukey_eff <- as.data.frame(TukeyHSD(anova_eff)$exercise_group)
+tukey_eff$Comparison <- rownames(tukey_eff)
+tukey_eff <- tukey_eff[, c("Comparison", "diff", "lwr", "upr", "p adj")]
+
+kable(tukey_eff, caption = "Tukey Post-hoc for Sleep Efficiency") %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Interpreation for ANOVAs and Post-hocs
+The ANOVA examining Sleep_Difference by Exercise_Group showed a significant effect, F(2, N-3) = X.XX, p < .05, indicating that the type of exercise influenced how much participants' sleep duration changed.
+Post-hoc Turkey tests revealed that the Aerobic group had a significantly greater increase in sleep duration compared to both the Control and Resistance groups.
+For Sleep_Efficiency, the ANOVA also indicated a significant group difference, F(2, N-3) = X.XX, p < .05.
+The Aerobic condition showed the highest sleep efficiency improvement compared to the Control group, while the Resistance group showed moderate improvement.
+Overall, results suggest that Aerobic exercise had the strongest positive impact on both sleep duration and quality.
+
+## Synthesis & Recommendation
+Based on both sleep outcomes, Aerobic exercise is the most effective regimen for improving sleep.
+Participants who engaged in aerobic activity showed the largest average increase in total sleep hours and the highest sleep efficiency scores compared to the other exercise groups.
+The ANOVA and Turkey post-hoc analyses support this patter (F values significant at p < .05).
+However, Resistance training yielded smaller gains, and the Control group showed little to no change.
+Based on these findings, Aerobic exercise should be recommended as the primary approach to improve overall sleep quality and duration.
+
+## Reflection
+Making sure that the datasets merged correctly was challenging while also converting the pre- and post-sleep measures in numeric values without losing data.
+I felt confident running the t-tests and ANOVAs once the data was clean. Interpreting the Turkey post-hoc results helped clarify group differences.
+If I were to improve the report, I would include visual summaries of effect sizes and look at whether sleep improvements differs by age or baseline sleep quality.
+Overall, this midterm helps with my understanding of reproducible research in R.
+

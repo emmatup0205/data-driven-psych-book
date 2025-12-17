@@ -1,0 +1,198 @@
+# Florida Crime Analytics - Uncovering the Root of Florida's Crime Surge
+
+## Chapter Introduction
+This chapter investigates socioeconomic factors associated with county-level crime rates across Florida. Using publicly available data, the analysis examines how median income, educational attainment, and urbanization relate to crime rates. The chapter applies descriptive statistics, correlation analysis, and multiple linear regression to identify key predictors of crime and visualize geographic patterns across counties.
+
+```{r florida-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(readxl)
+library(ggcorrplot)
+library(maps)
+```
+
+### Load and Clean Data
+```{r florida-load-clean-data}
+crime_data <- read_excel("Florida County Crime Rates.xlsx")
+
+crime_data <- crime_data %>%
+  rename(
+    Crime = C,
+    Income = I,
+    HighSchoolGrad = HS,
+    UrbanPop = U
+  )
+
+crime_data$County <- str_to_title(crime_data$County)
+
+head(crime_data)
+summary(crime_data)
+```
+
+### Descriptive Statistics 
+```{r florida-descriptive-stats}
+crime_data %>%
+  summarise(
+    Mean_Crime = mean(Crime, na.rm = TRUE),
+    Median_Crime = median(Crime, na.rm = TRUE),
+    Range_Crime = max(Crime, na.rm = TRUE) - min(Crime, na.rm = TRUE),
+    Mean_Income = mean(Income, na.rm = TRUE),
+    Mean_HS = mean(HighSchoolGrad, na.rm = TRUE),
+    Mean_Urban = mean(UrbanPop, na.rm = TRUE)
+  )
+```
+
+### Visualizations - Crime Histogram
+```{r crime-histogram, fig.height=5, fig.width=7}
+fig.cap="Distribution of crime rates across Florida counties. Most counties cluster at moderate crime levels, with fewer counties experiencing extremely high crime rates."
+ggplot(crime_data, aes(x = Crime)) +
+  geom_histogram(fill = "#0073C2FF", color = "white", bins = 20) +
+  labs(
+    x = "Crime Rate (per 1,000 residents)",
+    y = "Number of Counties"
+  ) +
+  theme_minimal()
+```
+
+### Visualizations - Income Crime Scatterplot
+```{r income-crime-scatter, fig.height=5, fig.width=7}
+fig.cap="Relationship between median income and crime rates across Florida counties. Higher median income is associated with lower crime rates, as indicated by the downward-sloping regression line."
+ggplot(crime_data, aes(x = Income, y = Crime)) +
+  geom_point(color = "#EFC000FF", size = 3) +
+  geom_smooth(method = "lm", color = "black", se = FALSE) +
+  labs(
+    x = "Median Income (in $1,000s)",
+    y = "Crime Rate (per 1,000 residents)"
+  ) +
+  theme_minimal()
+```
+
+### Correlation Analysis
+```{r crime-correlation-analysis}
+# Compute correlation matrix
+fig.cap="Correlation matrix showing relationships among crime, income, education, and urban population. Crime is negatively correlated with income and education, and positively correlated with urbanization."
+cor_matrix <- cor(
+  dplyr::select(crime_data, Crime, Income, HighSchoolGrad, UrbanPop),
+  use = "complete.obs"
+)
+
+ggcorrplot(
+  cor_matrix,
+  lab = TRUE,
+  colors = c("red", "white", "blue")
+)
+```
+
+*Interpretation:*
+1. **Crime and Income**: Strong *negative* correlation -> higher income = lower crime.
+2. **Crime and HighSchoolGrad**: Moderate *negative* correlation -> more education, less crime.
+3. **Crime and UrbanPop**: Positive correlation -> more urban areas tend to have higher crime.
+
+### Regression Models
+```{r crime-regression-models}
+model1 <- lm(Crime ~ Income, data = crime_data)
+
+model2 <- lm(Crime ~ Income + HighSchoolGrad, data = crime_data)
+model3 <- lm(Crime ~ Income + UrbanPop, data = crime_data)
+model4 <- lm(Crime ~ Income + HighSchoolGrad + UrbanPop, data = crime_data)
+
+summary(model1)
+summary(model2)
+summary(model3)
+summary(model4)
+
+AIC(model1, model2, model3, model4)
+```
+
+*Interpretation:*
+1. **Income** has a significant *negative* relationship with Crime.
+2. **HighSchoolGrad** adds additional predicitve power. This means that crime decreases as education rises.
+3. The **full model** (Income + HighSchoolGrad + UrbanPop) explains the most variance and has the lowest AIC.
+
+### Memo to the Chief of the Florida Police Department
+```{r crime-memo, echo=FALSE}
+cat("
+## Memo
+**To:** Chief, Florida Police Department
+**From:** Emma Valentina Tupone
+**Subject:** Socioeconomic Predictors of Florida County Crime Rates
+
+Dear Chief,
+
+Our analysis identified **median income**, **high school graduation rates**, and **urban population percentage** as key predictors of crime across Florida counties.
+
+1. Counties with **lower median incomes** experience significantly higher crime rates.
+2. **Education** is also a protective factor. Higher graduation rates correlate with reduced crime.
+3. More **urbanized counties** tend to have elevated crime rates.
+
+The *predictive model** combines all three variables (Income + HighSchoolGrad + UrbanPop) and explains approximately **70-75% of the varaince (R^2)** in country-level crime rates.
+
+**Recommendations:**
+
+1. Expand community programs that support education and job training.
+2. Focus prevention resources in high-urban, low-income areas.
+3. Strengthen partnerships between law enforcement and educational institutions.
+
+**Limitations:**
+This analysis identifies correlations, not causation. Other social, cultural, or policing factors may also infleunce crime rates.
+
+Sincerely,
+*Emma Valentina Tupone*
+")
+```
+
+### Final Question
+```{r crime-question, echo=FALSE}
+cat("
+### Based on your analysis, which model best predicts Florida's county-level crime rates, and why?
+
+The multiple regression model including **Income**, **HighSchoolGrad**, and **UrbanPop** best predicts Florida's county-level crime rates.
+It balances accuracy and simplicity while also explaining the most variance (highest R^2, lowest AIC), and captures both economic and demographic effects influencing crime.
+")
+```
+
+```{r florida-heatmap, fig.height=6, fig.width=8}
+
+library(maps)
+library(ggplot2)
+
+fig.cap="Heatmap of crime rates by Florida county. Darker shading indicates higher crime rates, highlighting geographic clustering of crime across the state."
+fl_map <- map_data("county") %>%
+  filter(region == "florida") %>%
+  mutate(subregion = str_to_title(subregion))
+
+florida_crime_map <- left_join(
+  fl_map,
+  crime_data,
+  by = c("subregion" = "County")
+)
+
+ggplot(florida_crime_map,
+       aes(long, lat, group = group, fill = Crime)) +
+  geom_polygon(color = "white") +
+  coord_fixed(1.3) +
+  scale_fill_gradient(
+    low = "#FBE8A6",
+    high = "#F76C6C",
+    na.value = "grey90"
+  ) +
+  labs(
+    fill = "Crime Rate\n(per 1,000 residents)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    legend.position = "right"
+  )
+```
+
+*Interpretation:*
+This heatmap highlights which Florida counties experience the highest crime rates.
+
+1. Darker shades indicate **higher crime levels**.
+2. Lighter areas represent **lower crime rates**.
+
+
+
+

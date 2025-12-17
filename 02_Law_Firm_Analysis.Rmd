@@ -1,0 +1,181 @@
+# Law Firm Analysis 
+
+## Chapter Introduction
+
+In this assignment, we analyze New York City violation data to understand patterns in payment amounts for parking and camera tickets. The goal is to uncover differences across issuing agencies, driver states, and counties that could inform a law firm's strategy for contesting tickets or targeting marketing efforts.
+
+We use descriptive statistics, visualizations, and inferential analyses (ANOVA) to answer the following questions:
+
+1. Do certain issuing agencies issue higher payments?  
+2. Do drivers from the tri-state area (NY, NJ, CT) pay more?  
+3. Do certain counties tend to have higher payment amounts?  
+
+The dataset comes from the [NYC Open Data Portal](https://data.cityofnewyork.us/resource/nc67-uf89.json).
+
+This chapter demonstrates data cleaning, data manipulation, visualization, and statistical analysis skills in R using real-world city data.
+
+## Setup
+```{r law-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(httr)
+library(jsonlite)
+library(supernova)
+library(mosaic)
+```
+
+## Load and Prepare the Data
+
+```{r law-load-data}
+# Download from NYC API
+if (file.exists("camera_data.RData")) {
+  load("camera_data.RData")
+  message("Loaded local dataset: camera_data.RData")
+} else {
+  message("Downloading dataset from NYC Open Data...")
+  endpoint <- "https://data.cityofnewyork.us/resource/nc67-uf89.json"
+  resp <- GET(endpoint, query = list("$limit" = 99999, "$order" = "issue_date DESC"))
+  camera <- fromJSON(content(resp, as = "text"), flatten = TRUE)
+  save(camera, file = "camera_data.RData")
+  message("Saved dataset locally as camera_data.RData")
+}
+
+# Confirm structure
+glimpse(camera)
+
+# Convert numeric variables
+camera <- camera %>%
+  mutate(across(
+    c("fine_amount","interest_amount","reduction_amount","payment_amount",
+      "amount_due","penalty_amount"),
+    ~as.numeric(.)
+  ))
+
+# Filter valid dates
+camera <- camera %>%
+  filter(str_detect(issue_date, "^\\d{4}-\\d{2}-\\d{2}T"))
+camera$issue_date <- as.Date(camera$issue_date)
+```
+
+---
+
+## 1. Issuing Agency and Payment Amount
+
+### Visualization
+```{r agency-plot, fig.height=5, fig.cap="Boxplot showing distribution of payment amounts for each issuing agency. Each box represents the median, interquartile range, and potential outliers, allowing comparison of payment patterns across agencies."}
+ggplot(camera, aes(x = issuing_agency, y = payment_amount)) +
+  geom_boxplot(fill = "steelblue", color = "gray30") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Payment Amount by Issuing Agency",
+       x = "Issuing Agency", y = "Payment Amount ($)")
+```
+
+### Descriptive Statistics
+```{r agency-descriptive}
+favstats(payment_amount ~ issuing_agency, data = camera) %>%
+  arrange(desc(mean))
+```
+
+### Inferential Statistics
+```{r agency-anova}
+anova_agency <- aov(payment_amount ~ issuing_agency, data = camera)
+summary(anova_agency)
+supernova(anova_agency)
+```
+
+### Interpretation
+If the F-value is large and p < .05, there are statistically significant differences in mean payment amounts between issuing agencies.  
+Though, the PRE (Proportion Reduction in Error) shows how much variance is explained. A small PRE (less than 0.05) means minimal real-world impact.  
+Any differences likely reflect agency-specific violation types rather than behavioral differences.
+
+---
+
+## 2. Tri-State Drivers (NY, NJ, CT) and Payment Amount
+
+### Visualization
+```{r state-plot, fig.height=4, fig.cap="Boxplot showing distribution of payment amounts for drivers from the tri-state area (NY, NJ, CT). Highlights differences in payment behavior and variability between states."}
+ggplot(camera %>% filter(state %in% c("NY","NJ","CT")),
+       aes(x = state, y = payment_amount)) +
+  geom_boxplot(fill = "tan", color = "gray30") +
+  theme_minimal() +
+  labs(title = "Payment Amount by Driver State (Tri-State Area)",
+       x = "Driver State", y = "Payment Amount ($)")
+```
+
+### Descriptive Statistics
+```{r state-descriptive}
+favstats(payment_amount ~ state, data = camera) %>%
+  filter(state %in% c("NY","NJ","CT")) %>%
+  arrange(desc(mean))
+```
+
+### Inferential Statistics
+```{r state-anova}
+tri_state <- camera %>% filter(state %in% c("NY","NJ","CT"))
+anova_state <- aov(payment_amount ~ state, data = tri_state)
+summary(anova_state)
+supernova(anova_state)
+```
+
+### Interpretation
+A significant p-value (< .05) means payment amounts differ among NY, NJ, and CT drivers.  
+If out-of-state drivers (NJ or CT) pay more, this could show processing delays or additional penalties.  
+Even with statistical significance, small PRE values would suggest that differences are limited.  
+The firm might focus marketing on out-of-state drivers if they tend to pay higher amounts.
+
+---
+
+## 3. County and Payment Amount
+
+### Clean County Names
+```{r county-clean}
+camera <- camera %>%
+  mutate(county = case_when(
+    county == "K" ~ "Kings County",
+    county == "Q" ~ "Queens County",
+    county == "BX" ~ "Bronx County",
+    county == "NY" ~ "New York County",
+    county == "R" ~ "Richmond County",
+    TRUE ~ county
+  ))
+```
+
+### Visualization
+```{r county-plot, fig.height=5, fig.cap="Boxplot showing distribution of payment amounts across New York City counties. Helps identifiy geographic patterns in payments and potential focus areas for strategic interventions."}
+ggplot(camera %>% filter(!is.na(county) & county != ""),
+       aes(x = county, y = payment_amount)) +
+  geom_boxplot(fill = "lightgreen", color = "gray30") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Payment Amount by County",
+       x = "County", y = "Payment Amount ($)")
+```
+
+### Descriptive Statistics
+```{r county-descriptive}
+favstats(payment_amount ~ county, data = camera) %>%
+  arrange(desc(mean))
+```
+
+### Inferential Statistics
+```{r county-anova}
+county_clean <- camera %>% filter(!is.na(county) & county != "")
+anova_county <- aov(payment_amount ~ county, data = county_clean)
+summary(anova_county)
+supernova(anova_county)
+```
+
+### Interpretation
+A significant ANOVA indicates payment amounts vary by county.  
+This could reflect local enforcement intensity or differences in violation types.  
+If PRE is relatively larger here than in the previous analyses, county may be the most useful predictor for marketing strategy.
+
+---
+
+## Final Summary
+
+Across all analyses, issuing agency, driver state, and county show statistically significant differences in payment amounts, primarily because of the very large dataset.  
+However, only county likely represents meaningful differences related to enforcement or geographic patterns.  
+The law firm should prioritize county in its marketing strategy, focusing advertising and outreach in areas with higher average payment amounts.  
+

@@ -1,0 +1,24 @@
+--- 
+title: "Data-Driven Insights in Psychology: Reproducible Analyses Using R"
+author: "Emma Valentina Tupone"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+bibliography: packages.bib
+# url: your book url like https://bookdown.org/yihui/bookdown
+# cover-image: path to the social sharing image like images/cover.jpg
+description: |
+  This is a minimal example of using the bookdown package to write a book.
+  The HTML output format for this example is bookdown::gitbook,
+  set in the _output.yml file.
+link-citations: yes
+github-repo: rstudio/bookdown-demo
+---
+
+# Data-Driven Insights in Psychology: Reproducible Analyses Using R
+
+This book is a compilation of data analyses completed as part of **PSYC. 7750G Reproducible Psychological Research, Fall 2025**.  
+It integrates multiple assignments exploring real-world datasets, including NYC open data, survey data on streaming preferences, and wage outcomes, using R for data cleaning, visualization, and statistical modeling.  
+
+The goal is to demonstrate **reproducible research practices**, from data wrangling to interpretation, while building skills in statistical reasoning, visualization, and reporting.  
+Each chapter provides context, methods, and clear explanations to allow readers to follow and replicate the analyses independently.
